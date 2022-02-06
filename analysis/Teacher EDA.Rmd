@@ -1,0 +1,27 @@
+---
+title: "EDA"
+author: "Mergentevne Narangerel"
+date: "2/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = F,
+                      fig.show = "hold",
+                      out.width = "50%")
+library(tidyverse)
+```
+
+```{r, include=FALSE}
+teacher_data <- read_csv("../data/Teacher Data NIFA.csv") %>%
+  select(-1)
+```
+
+```{r}
+map_dbl(teacher_data, ~sum(is.na(.)))
+```
+
+
+The Teacher dataset contains 
+
