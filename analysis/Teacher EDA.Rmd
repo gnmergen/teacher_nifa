@@ -19,9 +19,76 @@ teacher_data <- read_csv("../data/Teacher Data NIFA.csv") %>%
 ```
 
 ```{r}
-map_dbl(teacher_data, ~sum(is.na(.)))
+teacher_data %>%
+  count(TeacherID) %>% filter(n > 1)
+
+teacher_data %>%
+  skimr::skim()
 ```
 
+### **Variables to Keep**
 
-The Teacher dataset contains 
+#### **Job Stress**
 
+```{r}
+teacher_data %>%
+  select(contains('job'), school_type) %>%
+  filter(school_type == "Control")
+
+teacher_data %>%
+  select(contains('job'), school_type) %>%
+  filter(school_type == "Control") %>%
+  mutate(prejobstress = if_else(is.na(prejobstress), postjobstress, 
+                                prejobstress, missing = NULL),
+         postjobstress = if_else(is.na(postjobstress), prejobstress, 
+                                 postjobstress, missing = NULL))
+```
+#### **Mental Health**
+
+```{r}
+teacher_data %>%
+  select(contains('menthealth'), school_type)
+```
+Possible to use bootstrapping to impute values?
+
+
+```{r}
+teacher_data %>%
+  select(school_type, contains('score')) %>%
+  filter(school_type == "Control")
+
+teacher_data %>%
+  filter(school_type == "Control") %>%
+  select(school_type, contains('score')) %>%
+  select(where(function(x) sum(is.na(x)) / length(x) <0.6)) %>%
+  mutate(across(.cols = where(is.double), ~if_else(is.na(.x), 
+                                                   mean(.x, na.rm = TRUE), .x)))
+```
+```{r}
+teacher_data %>%
+  select(school_type, contains('personal')) %>%
+  ggplot(aes(x = prewtpersonalhealthsubscore, y = postwtpersonalhealthsubscore, 
+             color = school_type))+
+  geom_point(show.legend = F)+
+  facet_wrap(~school_type)+
+  theme_minimal()
+```
+
+```{r}
+teacher_data %>%
+  select(school_type, contains('activity')) %>%
+  ggplot(aes(x = prewtphysactivitysubscore, y = postwtphysactivitysubscore, 
+             color = school_type))+
+  geom_point(show.legend = F)+
+  facet_wrap(~school_type)+
+  theme_minimal()
+```
+
+```{r}
+teacher_data %>%
+  select(school_type, contains('cumulscore')) %>%
+  ggplot(aes(x = prewtcumulscore, y = postwtcumulscore, color = school_type)) +
+  geom_point()+
+  facet_wrap(~school_type, scales = "free", nrow = 2)+
+  theme_minimal()
+```
