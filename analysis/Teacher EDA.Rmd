@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.show = "hold",
                       out.width = "50%")
 library(tidyverse)
+library(tidymodels)
 ```
 
 ```{r, include=FALSE}
@@ -22,32 +23,121 @@ teacher_data <- read_csv("../data/Teacher Data NIFA.csv") %>%
 teacher_data %>%
   count(TeacherID) %>% filter(n > 1)
 
-teacher_data %>%
-  skimr::skim()
+teacher_scores <- teacher_data %>%
+  mutate(across(.cols = c(contains('soda') | contains('fruit') | contains('vegetables'), 
+         contains('water') | contains('breakfast')), ~parse_number(.))) %>%
+  mutate(across(.cols = c(contains('soda') | contains('fruit') | contains('vegetables'), 
+         contains('water') | contains('breakfast')) & where(function(x) sum(is.na(x)) / length(x) < 0.4), ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+  mutate(across(.cols = c(contains('soda') | contains('fruit') | contains('vegetables'), 
+         contains('water') | contains('breakfast')) & where(function(x) sum(is.na(x)) / length(x) < 0.4), ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+  mutate(across(.cols = contains('numshift') & where(function(x) sum(is.na(x)) / length(x) < 0.4),
+                ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+  mutate(
+    prewtcumulscorecustom = (
+      5/2*prehealthnumshift 
+    - 10/7*prephyhealth - 10/7*prementhealth
+    + 5/2*prestressinvnumshift + 10/7*prephyactive
+    - 10/7*presit - 10/7*precomputer
+    - 5/3*presoda + 5/3*prefruit
+    + 5/3*prevegetables + 5/3*prewater
+    + 5/3*prebreakfast + 5/2*prehealthednumshift 
+    + 5/2*prestudenthealthnumshift + 5/2*preteacherrespnumshift
+    + 5/2*preintegratenumshift + 5/2*preparticipatenumshift
+    + 5/2*preimpactnumshift + 5/2*preachievementnumshift
+    + 5/2*prepromotenumshift + 5/2*preengagenumshift
+    + 5/2*prevaluenumshift + 5/2*premotivatenumshift
+    + 5/2*preassistnumshift + 5/2*preimprovenumshift
+    + 5/2*prethinknumshift
+                       )*(10/21)
+  ) %>%
+  mutate(
+    postwtcumulscorecustom = (
+      5/2*posthealthnumshift 
+    - 10/7*postphyhealth - 10/7*postmenthealth
+    + 5/2*poststressinvnumshift + 10/7*postphyactive
+    - 10/7*postsit - 10/7*postcomputer
+    - 5/3*postsoda + 5/3*postfruit
+    + 5/3*postvegetables + 5/3*postwater
+    + 5/3*postbreakfast + 5/2*posthealthednumshift 
+    + 5/2*poststudenthealthnumshift + 5/2*postteacherrespnumshift
+    + 5/2*postintegratenumshift + 5/2*postparticipatenumshift
+    + 5/2*postimpactnumshift + 5/2*postachievementnumshift
+    + 5/2*postpromotenumshift + 5/2*postengagenumshift
+    + 5/2*postvaluenumshift + 5/2*postmotivatenumshift
+    + 5/2*postassistnumshift + 5/2*postimprovenumshift
+    + 5/2*postthinknumshift
+                       )*(10/21)
+  )
 ```
+
+$$
+Score = \frac{10}{21}*(\frac{5}{2}*Health-\frac{10}{7}*PhysicalAct-\frac{10}{7}*MentalHealth+...+\frac{5}{2}*Breakfast)
+$$
+
+```{r}
+teacher_data %>%
+  select(contains('numshift') | contains('soda') | contains('fruit') | contains('vegetables'), 
+         contains('water') | contains('breakfast')) %>%
+  summarise(across(everything(), ~100*sum(is.na(.)/length(.)))) %>%
+  pivot_longer(cols = everything(), names_to = 'variable', values_to = 'value', values_drop_na = F) %>%
+  filter(value > 40) %>%
+  arrange(desc(value))
+```
+
+```{r}
+names <- c('prehealthnumshift','prephyhealth','prementhealth','prestressinvnumshift',
+           'prephyactive','presit','precomputer','presoda','prefruit','prevegetables',
+           'prewater','prebreakfast','prehealthednumshift','prestudenthealthnumshift',
+           'preteacherrespnumshift','preintegratenumshift','preparticipatenumshift',
+           'preimpactnumshift','preachievementnumshift','prepromotenumshift',
+           'preengagenumshift','prevaluenumshift','premotivatenumshift',
+           'preassistnumshift', 'preimprovenumshift', 'prethinknumshift')
+
+names <- str_replace(names, "pre", '')
+```
+
+
+```{r}
+library(mice)
+
+teacher_bootmethod <- teacher_scores %>%
+  select(TeacherID, prewtcumulscorecustom, postwtcumulscorecustom)
+
+tempdata <- mice(teacher_bootmethod, m = 5, method = 'pmm', seed = 123)
+
+tempdata$imp$prewtcumulscore
+
+teacher_scores %>%
+  select(prewtcumulscorecustom, postwtcumulscorecustom)
+
+teacher_data %>%
+  select(prewtcumulscore, postwtcumulscore)
+```
+
+
 
 ### **Variables to Keep**
 
 #### **Job Stress**
 
 ```{r}
-teacher_data %>%
-  select(contains('job'), school_type) %>%
-  filter(school_type == "Control")
-
-teacher_data %>%
-  select(contains('job'), school_type) %>%
-  filter(school_type == "Control") %>%
-  mutate(prejobstress = if_else(is.na(prejobstress), postjobstress, 
-                                prejobstress, missing = NULL),
-         postjobstress = if_else(is.na(postjobstress), prejobstress, 
-                                 postjobstress, missing = NULL))
+teacher_scores <- teacher_data %>%
+  select(TeacherID, prehealthnumshift, prephyhealth, prementhealth, prestressinvnumshift, prephyactive, presit, precomputer, presoda, prefruit, prevegetables,
+         prewater, prebreakfast, prehealthednumshift, prestudenthealthnumshift, preteacherrespnumshift, preintegratenumshift, preparticipatenumshift, preimpactnumshift, preachievementnumshift, prepromotenumshift, preengagenumshift, prevaluenumshift, premotivatenumshift, preassistnumshift, preimprovenumshift, prethinknumshift) %>%
+  mutate(across(.cols = c(prehealthnumshift, prephyhealth, prementhealth, prestressinvnumshift), ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+  mutate(
+    prewtcumulscore = (5/2)*prehealthnumshift-(10/7)*prephyhealth-(10/7)*prementhealth+(5/2)*prestressinvnumshift
+        )
 ```
 #### **Mental Health**
 
 ```{r}
 teacher_data %>%
-  select(contains('menthealth'), school_type)
+  select(contains('numshift')) %>%
+  mutate(across(.cols = contains('numshift') & where(function(x) sum(is.na(x)) / length(x) < 0.4),
+                ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+  
+  
 ```
 Possible to use bootstrapping to impute values?
 
@@ -55,12 +145,11 @@ Possible to use bootstrapping to impute values?
 ```{r}
 teacher_data %>%
   select(school_type, contains('score')) %>%
-  filter(school_type == "Control")
+  select(where(function(x) sum(is.na(x)) / length(x) < 0.6))
 
 teacher_data %>%
-  filter(school_type == "Control") %>%
   select(school_type, contains('score')) %>%
-  select(where(function(x) sum(is.na(x)) / length(x) <0.6)) %>%
+  select(where(function(x) sum(is.na(x)) / length(x) <0.3)) %>%
   mutate(across(.cols = where(is.double), ~if_else(is.na(.x), 
                                                    mean(.x, na.rm = TRUE), .x)))
 ```
