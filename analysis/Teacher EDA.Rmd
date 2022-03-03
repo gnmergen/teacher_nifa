@@ -31,7 +31,7 @@ teacher_scores <- teacher_data %>%
   mutate(across(.cols = c(contains('soda') | contains('fruit') | contains('vegetables'), 
          contains('water') | contains('breakfast')) & where(function(x) sum(is.na(x)) / length(x) < 0.4), ~if_else(is.na(.), median(., na.rm = T), .))) %>%
   mutate(across(.cols = contains('numshift') & where(function(x) sum(is.na(x)) / length(x) < 0.4),
-                ~if_else(is.na(.), median(., na.rm = T), .))) %>%
+                ~if_else(is.na(.), mean(., na.rm = T), .))) %>%
   mutate(
     prewtcumulscorecustom = (
       5/2*prehealthnumshift 
@@ -48,7 +48,7 @@ teacher_scores <- teacher_data %>%
     + 5/2*prevaluenumshift + 5/2*premotivatenumshift
     + 5/2*preassistnumshift + 5/2*preimprovenumshift
     + 5/2*prethinknumshift
-                       )*(10/21)
+                       )
   ) %>%
   mutate(
     postwtcumulscorecustom = (
@@ -66,7 +66,7 @@ teacher_scores <- teacher_data %>%
     + 5/2*postvaluenumshift + 5/2*postmotivatenumshift
     + 5/2*postassistnumshift + 5/2*postimprovenumshift
     + 5/2*postthinknumshift
-                       )*(10/21)
+                       )
   )
 ```
 
@@ -80,8 +80,8 @@ teacher_data %>%
          contains('water') | contains('breakfast')) %>%
   summarise(across(everything(), ~100*sum(is.na(.)/length(.)))) %>%
   pivot_longer(cols = everything(), names_to = 'variable', values_to = 'value', values_drop_na = F) %>%
-  filter(value > 40) %>%
-  arrange(desc(value))
+  filter(value > 50) %>%
+  select(variable) -> teacher_drop_cols
 ```
 
 ```{r}
@@ -96,23 +96,36 @@ names <- c('prehealthnumshift','prephyhealth','prementhealth','prestressinvnumsh
 names <- str_replace(names, "pre", '')
 ```
 
-
 ```{r}
-library(mice)
-
-teacher_bootmethod <- teacher_scores %>%
-  select(TeacherID, prewtcumulscorecustom, postwtcumulscorecustom)
-
-tempdata <- mice(teacher_bootmethod, m = 5, method = 'pmm', seed = 123)
-
-tempdata$imp$prewtcumulscore
-
-teacher_scores %>%
-  select(prewtcumulscorecustom, postwtcumulscorecustom)
+teacher_data %>%
+  select(contains('soda'), school_type)
 
 teacher_data %>%
-  select(prewtcumulscore, postwtcumulscore)
+  select(contains('water'), school_type)
+
+teacher_data %>%
+  select(contains('breakfast'), school_type)
+
+teacher_data %>%
+  select(contains('fruit'), school_type)
+
+teacher_scores %>%
+  select(contains('cumulscore'))
+  
+
+range(teacher_scores$prewtcumulscorecustom, na.rm = TRUE)
 ```
+
+```{r}
+teacher_scores %>%
+  select(contains('smoke'), school_type) %>%
+  filter(school_type == 'Experimental')
+```
+
+
+
+
+
 
 
 
@@ -120,64 +133,47 @@ teacher_data %>%
 
 #### **Job Stress**
 
-```{r}
-teacher_scores <- teacher_data %>%
-  select(TeacherID, prehealthnumshift, prephyhealth, prementhealth, prestressinvnumshift, prephyactive, presit, precomputer, presoda, prefruit, prevegetables,
-         prewater, prebreakfast, prehealthednumshift, prestudenthealthnumshift, preteacherrespnumshift, preintegratenumshift, preparticipatenumshift, preimpactnumshift, preachievementnumshift, prepromotenumshift, preengagenumshift, prevaluenumshift, premotivatenumshift, preassistnumshift, preimprovenumshift, prethinknumshift) %>%
-  mutate(across(.cols = c(prehealthnumshift, prephyhealth, prementhealth, prestressinvnumshift), ~if_else(is.na(.), median(., na.rm = T), .))) %>%
-  mutate(
-    prewtcumulscore = (5/2)*prehealthnumshift-(10/7)*prephyhealth-(10/7)*prementhealth+(5/2)*prestressinvnumshift
-        )
-```
 #### **Mental Health**
 
-```{r}
-teacher_data %>%
-  select(contains('numshift')) %>%
-  mutate(across(.cols = contains('numshift') & where(function(x) sum(is.na(x)) / length(x) < 0.4),
-                ~if_else(is.na(.), median(., na.rm = T), .))) %>%
-  
-  
-```
 Possible to use bootstrapping to impute values?
 
 
 ```{r}
-teacher_data %>%
-  select(school_type, contains('score')) %>%
-  select(where(function(x) sum(is.na(x)) / length(x) < 0.6))
-
-teacher_data %>%
-  select(school_type, contains('score')) %>%
-  select(where(function(x) sum(is.na(x)) / length(x) <0.3)) %>%
-  mutate(across(.cols = where(is.double), ~if_else(is.na(.x), 
-                                                   mean(.x, na.rm = TRUE), .x)))
-```
-```{r}
-teacher_data %>%
-  select(school_type, contains('personal')) %>%
-  ggplot(aes(x = prewtpersonalhealthsubscore, y = postwtpersonalhealthsubscore, 
-             color = school_type))+
-  geom_point(show.legend = F)+
-  facet_wrap(~school_type)+
-  theme_minimal()
+teacher_demo <- teacher_data %>%
+  select(!teacher_drop_cols$variable) %>%
+  select(TeacherID:preweight) %>%
+  rename_with(~str_replace(., "pre", ""), .cols = starts_with("pre")) %>%
+  rename("lesson_bucket" = Lesson_bucket)
 ```
 
+
 ```{r}
-teacher_data %>%
-  select(school_type, contains('activity')) %>%
-  ggplot(aes(x = prewtphysactivitysubscore, y = postwtphysactivitysubscore, 
-             color = school_type))+
-  geom_point(show.legend = F)+
-  facet_wrap(~school_type)+
-  theme_minimal()
+teacher_phyhealth <- teacher_scores %>%
+  select(TeacherID, prediabetes, prehypertension, preasthma,  school_type) %>%
+  mutate(prediabetes = case_when(prediabetes == "Not Sure" ~ "No",
+                                 TRUE ~ prediabetes),
+         chroniccondition = case_when(
+           prediabetes == "Yes" | prehypertension == "Yes" | preasthma == "Yes" ~ "Yes",
+           prediabetes == "No" & prehypertension == "No" & preasthma == "No" ~ "No",
+           TRUE ~ "NA"
+         ),
+         chroniccondition = parse_character(chroniccondition, na = c("NA")))
 ```
 
 ```{r}
 teacher_data %>%
-  select(school_type, contains('cumulscore')) %>%
-  ggplot(aes(x = prewtcumulscore, y = postwtcumulscore, color = school_type)) +
-  geom_point()+
-  facet_wrap(~school_type, scales = "free", nrow = 2)+
-  theme_minimal()
+  filter(school_type == "Experimental") %>%
+  select(TeacherID, school_type, contains("post")) %>%
+  select(where(function(x) sum(is.na(x)) / length(x) < 0.4)) %>%
+  mutate(across(.cols = everything(), as.character)) %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value") %>%
+  count(variable) -> teacher_names
 ```
+
+```{r}
+teacher_post <- teacher_data %>%
+  select(teacher_names$variable)
+```
+
+
+
